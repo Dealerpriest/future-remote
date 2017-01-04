@@ -1,7 +1,7 @@
  "use strict";
-
+var commandTimeout = 50;
 var sphero = require("sphero");
-var orb = sphero(process.env.PORT);
+var orb = sphero(process.env.PORT, {timeout: commandTimeout});
 
 //Inactivate all sphero interaction by setting to false
 var useSphero = true;
@@ -14,10 +14,13 @@ var math3d = require('math3d');
 var Quaternion = math3d.Quaternion;
 var Vector3 = math3d.Vector3;
 
-//initialize vectors with some values
+//math3d has right as posititve x-axis
+//positive x is along the arm when putting on myo (when usb socket is towards elbow)
+var referenceVector = Vector3.right;
+//initialize some more vectors with some values
 var directionVector = Vector3.right;
 var planeVector = Vector3.zero;
-var myoSpheroAngleOffset = 90;
+var myoSpheroAngleOffset = 270;
 
   // Myo = Myo.create();
   // console.log(Myo.myos[0]);
@@ -36,8 +39,10 @@ var myoSpheroAngleOffset = 90;
   Myo.on('arm_synced', function(){
     console.log("arm is synced");
     console.log("myo logo is towards: " + Myo.myos[0].direction);
-    if(Myo.direction === 'towards_elbow')
-      myoSpheroAngleOffset = 270;
+    if(Myo.direction === 'towards_wrist'){
+      myoSpheroAngleOffset = 90;
+      referenceVector = Vector3.left;
+    }
   });
 
  //  Myo.on('double_tap', function(){
@@ -49,9 +54,7 @@ var myoSpheroAngleOffset = 90;
   Myo.on('orientation', function(data){
     // var q = Quaternion.Euler(0,0,90);
     var q = new Quaternion(data['x'], data['y'], data['z'], data['w']);
-    //math3d has right as posititve x-axis
-    //positive x is along the arm when putting on myo (when usb socket is towards elbow)
-    var referenceVector = Vector3.right;
+    
     directionVector = q.mulVector3(referenceVector);
     planeVector = new Vector3(directionVector.x, directionVector.y, 0);
 
@@ -76,12 +79,12 @@ var myoSpheroAngleOffset = 90;
         // console.log("with a magnitude of: " +directionVector.magnitude);
         var direction = Math.atan2(planeVector.x, planeVector.y)*180/Math.PI;
         direction += 180;//make it positive
-          direction += myoSpheroAngleOffset; //align with myo's world coordinates
+        direction += myoSpheroAngleOffset; //align with myo's world coordinates
         direction %= 360; //wrap around at 360
         var speed = planeVector.magnitude * 100;
 
         console.log("sending roll request with direction: " + direction + " and speed " + speed);
         orb.roll(speed, direction);
-      }, 300);
+      }, commandTimeout);
     });
   }
