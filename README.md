@@ -6,7 +6,7 @@ these steps should be undertaken i a terminal (obviously).
 Make sure to have node installed (and git, also obviously).
 Cd to an appropriate folder
 ```
-git clone git@github.com:Dealerpriest/future-remote.git
+git clone https://github.com/Dealerpriest/future-remote.git
 cd future-remote
 npm install
 ```
