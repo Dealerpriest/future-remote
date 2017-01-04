@@ -1,0 +1,19 @@
+{
+  "name": "future-remote",
+  "version": "1.0.0",
+  "description": "Prototype code for controlling Sphero 2.0 with Myo armband",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Gunnar Oledal",
+  "license": "ISC",
+  "dependencies": {
+    "math3d": "^0.2.2",
+    "myo": "^3.0.0",
+    "noble": "^1.7.0",
+    "serialport": "^4.0.7",
+    "sphero": "^0.9.2",
+    "ws": "^1.1.1"
+  }
+}
