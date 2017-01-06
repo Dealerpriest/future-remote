@@ -9,6 +9,7 @@
   "author": "Gunnar Oledal",
   "license": "ISC",
   "dependencies": {
+    "keypress": "^0.2.1",
     "math3d": "^0.2.2",
     "myo": "^3.0.0",
     "noble": "^1.7.0",

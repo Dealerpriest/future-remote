@@ -1,17 +1,19 @@
  "use strict";
-var commandTimeout = 50; //timeout before sent commands are considered dead.
 var sphero = require("sphero");
+var Myo = require('myo');
+var fs = require('fs');
+var keypress = require("keypress");
+var math3d = require('math3d');
+//math3d uses x=right, y=up, z=forward
+
+var commandTimeout = 50; //timeout before sent commands are considered dead.
 var orb = sphero(process.env.PORT, {timeout: commandTimeout});
 
 //Inactivate all sphero interaction by setting to false
 var useSphero = true;
 // 'aiming', 'banking'
 var controlMethod = 'banking'
-
-
-var Myo = require('myo');
-var math3d = require('math3d');
-//math3d uses x=right, y=up, z=forward
+var spheroConnected = false;
 
 //So we have quick acccess to the different APIs
 var Quaternion = math3d.Quaternion;
@@ -21,18 +23,39 @@ var Vector3 = math3d.Vector3;
 //positive x is along the arm when putting on myo (when usb socket is towards elbow)
 var armAxis = Vector3.right;
 //initialize some more vectors with some values
-var directionVector = Vector3.right;
+var armDirectionVector = Vector3.right;
 //holds the direction of arm projected on ground plane
-var projectedDirectionVector = Vector3.zero;
+var projectedArmDirectionVector = Vector3.zero;
+var projectedArmDirectionAngle = 0;
+var adjustedArmdDirectionAngle
 
-//math3d has forward as z axis;
-var upAxis = Vector3.forward;
-//planeVector holds the banking of the plane
-var planeVector = Vector3.zero;
+// //math3d has forward as z axis;
+// var upAxis = Vector3.forward;
+// //planeVector holds the banking of the plane
+// var planeVector = Vector3.zero;
 
+//How is the acccelerometer banking in the ground plane?
 var accelerometerPlaneVector = Vector3.zero;
+var bankDirectionAngle = 0;
 
-var myoSpheroAngleOffset = 270;
+var myoSpheroAngleOffset = 0;
+
+var myoStream = undefined;
+var logMyo = false;
+var logCounter = 0;
+
+var doubleTapCounter = 0;
+
+var myoIsOnArm = false;
+
+//Listening for keypresses
+keypress(process.stdin);
+process.stdin.on("keypress", handle);
+
+console.log("starting to listen for key presses");
+
+process.stdin.setRawMode(true);
+process.stdin.resume();
 
 // Myo = Myo.create();
 // console.log(Myo.myos[0]);
@@ -50,33 +73,59 @@ Myo.on('warmup_completed', function(){
 
 //Strangely this doesn't seem to work. I get towards_elbow in all configurations. The only value that changes is arm, even when just flipping the arm band on same arm. 
 Myo.on('arm_synced', function(){
+  myoIsOnArm = true;
   console.log("arm is synced");
   console.log("on arm" + Myo.myos[0].arm);
   console.log("myo logo is towards: " + Myo.myos[0].direction);
-  if(Myo.direction === 'towards_wrist'){
-    console.log("inverting armAxis");
-    // myoSpheroAngleOffset = 90;
-    armAxis = Vector3.left;
-  }
+  // if(Myo.direction === 'towards_wrist'){
+  //   console.log("inverting armAxis");
+  //   // myoSpheroAngleOffset = 90;
+  //   armAxis = Vector3.left;
+  // }
 });
 
-//  Myo.on('double_tap', function(){
-//    console.log('Setting reference point');
-//    this.zeroOrientation();
-//    this.vibrate();
-// });
+Myo.on('arm_unsynced', function(){
+  console.log("armBand taken off!");
+  myoIsOnArm = false;
+  if(spheroConnected){
+    orb.stop();
+  }
+})
+
+Myo.on('double_tap', function(){
+  if(doubleTapCounter%2 === 0){
+    console.log('First double tap');
+    if(spheroConnected){
+      orb.stop();
+      orb.startCalibration();
+    }
+    this.vibrate();
+    console.log("myoSpheroAngleOffset: " + myoSpheroAngleOffset);
+  }else{
+    console.log('Second double tap');
+    myoSpheroAngleOffset = 360 - projectedArmDirectionAngle;
+    orb.finishCalibration();
+    this.vibrate();
+  }
+  doubleTapCounter++;
+});
 
 Myo.on('orientation', function(data){
-  // var q = Quaternion.Euler(0,0,90);
+
+  //Calculate all orientation variable to be used to control the sphero
   var q = new Quaternion(data['x'], data['y'], data['z'], data['w']);
-  
-  directionVector = q.mulVector3(armAxis);
-  projectedDirectionVector = new Vector3(directionVector.x, directionVector.y, 0);
+  armDirectionVector = q.mulVector3(armAxis);
+  projectedArmDirectionVector = new Vector3(armDirectionVector.x, -armDirectionVector.y, 0);
+  projectedArmDirectionAngle = vec2ToPositiveAngle(projectedArmDirectionVector.x, projectedArmDirectionVector.y);
+  adjustedArmdDirectionAngle = constrainAngle(projectedArmDirectionAngle + myoSpheroAngleOffset);
 
-  planeVector = q.mulVector3(upAxis);
+  // planeVector = q.mulVector3(upAxis);
 
-  //Att this point the y & z components in the directionVector represents direction.
+  //Att this point the y & z components in the armDirectionVector represents direction.
   if(!useSphero){
+    // console.log(projectedArmDirectionVector.values.map(function(x){return x.toFixed(2)}));
+    console.log("armAngle: " + projectedArmDirectionAngle);
+    console.log("adjusting with: " + myoSpheroAngleOffset + ". Adjusted angle: " + adjustedArmdDirectionAngle);
     // console.log(q.eulerAngles);
     // console.log(planeVector.values.map(function(x){return x.toFixed(2)}));
     // console.log(q.angleAxis);
@@ -85,9 +134,10 @@ Myo.on('orientation', function(data){
 
 Myo.on('accelerometer', function(data){
   accelerometerPlaneVector = new Vector3(data.x, data.y, 0);
+  bankDirectionAngle = vec2ToPositiveAngle(accelerometerPlaneVector.x, -accelerometerPlaneVector.y);
 
   if(!useSphero){
-    console.log(accelerometerPlaneVector);
+    // console.log(accelerometerPlaneVector);
   }
 })
 
@@ -95,16 +145,23 @@ Myo.on('accelerometer', function(data){
 if(useSphero){
   orb.connect().then(function() {
     console.log("SPHERO connected!");
+    spheroConnected = true;
   }).then(function() {
     orb.stopOnDisconnect(function(err, data) {
       console.log(err || "data" + JSON.stringify(data));
     });
   }).then(function(){
     setInterval(controlSphero, commandTimeout+10);
+  }).then(function(){
+    
   });
 }
 
+
+
 function controlSphero(){
+  if(!myoIsOnArm)
+    return;
   switch (controlMethod){
     case 'banking':
       bankControl();
@@ -116,27 +173,21 @@ function controlSphero(){
 }
 
 function aimControl(){
-  console.log("directionvector is: " + directionVector.values.map(function(x){return x.toFixed(2)}));
-  // console.log("with a magnitude of: " +directionVector.magnitude);
-  var direction = Math.atan2(projectedDirectionVector.x, projectedDirectionVector.y)*180/Math.PI;
-  direction += 180;//make it positive
-  direction += myoSpheroAngleOffset; //align with myo's world coordinates
-  direction %= 360; //wrap around at 360
-  var speed = projectedDirectionVector.magnitude * 100;
+  console.log("armDirectionVector is: " + armDirectionVector.values.map(function(x){return x.toFixed(2)}));
+  // console.log("with a magnitude of: " +armDirectionVector.magnitude);
 
-  console.log("sending roll request with direction: " + direction + " and speed " + speed);
-  orb.roll(speed, direction);
+  var speed = projectedArmDirectionVector.magnitude * 100;
+
+  console.log("sending roll request with direction: " + adjustedArmdDirectionAngle + " and speed " + speed);
+  orb.roll(speed, adjustedArmdDirectionAngle);
 }
 
 function bankControl(){
   console.log("accelerometerPlaneVector" + accelerometerPlaneVector.values.map(function(x){return x.toFixed(2)}));
-
-  var armDirection = vec2ToPositiveAngle(projectedDirectionVector.x, projectedDirectionVector.y);
-  console.log(armDirection);
-  // console.log("with a magnitude of: " +directionVector.magnitude);
-  var bankDirection = vec2ToPositiveAngle(accelerometerPlaneVector.x, accelerometerPlaneVector.y);
-  console.log(bankDirection);
-  var rollDirection = armDirection + bankDirection + myoSpheroAngleOffset;
+  // console.log("with a magnitude of: " +armDirectionVector.magnitude);
+  
+  console.log("bankDirectionAngle: " + bankDirectionAngle);
+  var rollDirection = bankDirectionAngle + adjustedArmdDirectionAngle;
   rollDirection = constrainAngle(rollDirection);
 
   var speed = accelerometerPlaneVector.magnitude * 100;
@@ -147,12 +198,38 @@ function bankControl(){
 }
 
 function vec2ToPositiveAngle(x, y){
-  var angle = Math.atan2(x, y)*180/Math.PI;
-  angle += 180;//make it positive
+  var angle = Math.atan2(y, x)*180/Math.PI;
+  angle += 360;//make it positive
   angle %= 360; //wrap around at 360
   return angle;
 }
 
 function constrainAngle(angle){
   return angle%360;
+}
+
+function handle(ch, key) {
+
+  if (key.ctrl && key.name === "c") {
+    if(myoStream){
+      myoStream.end();
+    }
+    process.stdin.pause();
+    process.exit();
+  }
+
+  //TODO: check if buffer gets discarded or if there are samples missing in the log file
+  if (!logMyo && key.name === "l") {
+    //Setup logfile
+    myoStream = fs.createWriteStream('myo.csv');
+    myoStream.write("nr, milliseconds, angle\n");
+    //initiate logging of data
+    setInterval(function(){
+      console.log("saving a data sample");
+      // var dataSample = "" + projectedArmDirectionVector.x + "," + projectedArmDirectionVector.y + "\n";
+      var dataSample = logCounter + ", " + Date.now() + ", " + vec2ToPositiveAngle(projectedArmDirectionVector.x, projectedArmDirectionVector.y) + "\n";
+      myoStream.write(dataSample);
+      logCounter++;
+    }, 1000);
+  }
 }
