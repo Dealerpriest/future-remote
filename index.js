@@ -53,6 +53,7 @@ var adjustedArmdDirectionAngle
 // var planeVector = Vector3.zero;
 
 //How is the acccelerometer banking in the ground plane?
+var accelerometerOffsetAngle = 0;
 var accelerometerPlaneVector = Vector3.zero;
 var bankDirectionAngle = 0;
 
@@ -173,6 +174,9 @@ Myo.on('orientation', function(data){
 });
 
 Myo.on('accelerometer', function(data){
+  //TODO: Offset the vector here so we dont have to worry about how the myo is rotated around the arm
+
+
   accelerometerPlaneVector = new Vector3(data.x, data.y, 0);
   bankDirectionAngle = vec2ToPositiveAngle(accelerometerPlaneVector.x, -accelerometerPlaneVector.y);
 
