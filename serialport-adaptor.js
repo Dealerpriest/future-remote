@@ -6,21 +6,28 @@ var util = require("util"),
 var serialport,
     isChrome = typeof chrome !== "undefined";
 
+// thanks to https://github.com/jgautier/firmata/blob/master/lib/firmata.js
 try {
-  serialport = require("bluetooth-serial-port");
+  if (isChrome) {
+    serialport = require("browser-serialport");
+  } else {
+    serialport = require("serialport");
+  }
 } catch (error) {
   serialport = null;
 }
 
 if (serialport == null) {
   var err = [
-    "It looks like bluetooth-serial-port didn't compile properly.",
-    "This is a common problem, and it's fix is documented here:",
-    "https://github.com/eelcocramer/node-bluetooth-serial-port"
-  ].join(" ");
+    "It looks like you want to connect to a Sphero 1.0/2.0 or Sphero SPRK,",
+    "but did not install the 'node-serialport' module.", "",
+    "To install it run this command:",
+    "npm install serialport", "",
+    "For more information go to https://github.com/voodootikigod/node-serialport#to-install"
+  ].join("\n");
 
   console.error(err);
-  throw new Error("Missing bluetooth-serial-port dependency");
+  throw new Error("Missing serialport dependency");
 }
 
 /**
@@ -45,27 +52,31 @@ util.inherits(Adaptor, EventEmitter);
  */
 Adaptor.prototype.open = function open(callback) {
   var self = this,
-      port = this.serialport = new serialport.BluetoothSerialPort();
-  port.findSerialPortChannel(self.conn, function(channel) {
-    console.log("Opening: " + self.conn + " on channel: " + channel);
-    port.connect(self.conn, channel, function(){
-      self.emit("open");
-      port.on("error", emit("error"));
-      port.on("close", emit("close"));
-      port.on("data", emit("data"));
-      callback();
+      port = this.serialport = new serialport.SerialPort(this.conn, {});
 
-    });
-  }, function(err) {
-      console.log('Error searching ' + self.conn + ': ' + err);
-      self.emit("error");
-      // console.log('Retrying! Fuuuuuuck!');
-      // open(callback);
-  });
-  
   function emit(name) {
     return self.emit.bind(self, name);
   }
+
+  port.on("open", function(error) {
+    if (error) {
+      callback(error);
+      return;
+    }
+
+    self.emit("open");
+
+    port.on("error", emit("error"));
+    port.on("close", emit("close"));
+    port.on("data", emit("data"));
+
+    callback();
+  });
+
+  port.on("error", function(error) {
+    console.log(error);
+    self.emit("error");
+  });
 };
 
 /**
@@ -77,12 +88,7 @@ Adaptor.prototype.open = function open(callback) {
  * @return {void}
  */
 Adaptor.prototype.write = function write(data, callback) {
-  if (!callback) {
-    callback = function (err, bytesWritten) {
-      if (err) console.log(err);
-    }
-  }
-  this.serialport.write(new Buffer(data, 'utf-8'), callback);
+  this.serialport.write(data, callback);
 };
 
 /**

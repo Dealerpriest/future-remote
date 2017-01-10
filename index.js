@@ -5,12 +5,18 @@ var fs = require('fs');
 var keypress = require("keypress");
 var math3d = require('math3d');
 
-var myAdaptor = require('./custom-adaptor.js');
+// var myAdaptor = require('./custom-adaptor.js');
+var serialAdaptor = require('./serialport-adaptor.js');
 //math3d uses x=right, y=up, z=forward
 
 var commandTimeout = 50; //timeout before sent commands are considered dead.
 // var orb = sphero(process.env.PORT, {timeout: commandTimeout});
-var orb = sphero(null, {timeout: commandTimeout, adaptor: new myAdaptor(process.env.ADDRESS)});
+if(!process.env.PORT){
+  console.log("please provide a serial port as input by setting the PORT environment variable!");
+  process.exit()
+}
+var orb = sphero(null, {timeout: commandTimeout, adaptor: new serialAdaptor(process.env.PORT)});
+// var orb = sphero(null, {timeout: commandTimeout, adaptor: new myAdaptor(process.env.ADDRESS)});
 
 //Inactivate all sphero interaction by setting to false
 var useSphero = true;

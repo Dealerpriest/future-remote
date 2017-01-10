@@ -10,6 +10,14 @@ git clone https://github.com/Dealerpriest/future-remote.git
 cd future-remote
 npm install
 ```
+
+# update to newest version
+cd to future-remote
+```
+git reset --hard
+git pull
+```
+
 # run
 make sure both myo and sphero is connected (and paired) appropriately.
 find the mac address of the sphero. This can be achieved by calling:
