@@ -4,15 +4,23 @@ var Myo = require('myo');
 var fs = require('fs');
 var keypress = require("keypress");
 var math3d = require('math3d');
+
+var myAdaptor = require('./custom-adaptor.js');
 //math3d uses x=right, y=up, z=forward
 
 var commandTimeout = 50; //timeout before sent commands are considered dead.
-var orb = sphero(process.env.PORT, {timeout: commandTimeout});
+// var orb = sphero(process.env.PORT, {timeout: commandTimeout});
+var orb = sphero(null, {timeout: commandTimeout, adaptor: new myAdaptor(process.env.PORT), emitPacketErrors: true});
 
 //Inactivate all sphero interaction by setting to false
 var useSphero = true;
 // 'aiming', 'banking'
-var controlMethod = 'banking'
+const controlMethods = {
+  banking: 0,
+  aiming: 1,
+
+}
+var controlMethod = controlMethods.aiming;
 var spheroConnected = false;
 
 //So we have quick acccess to the different APIs
@@ -110,6 +118,12 @@ Myo.on('double_tap', function(){
   doubleTapCounter++;
 });
 
+Myo.on('fingers_spread', function(){
+  this.vibrate();
+  controlMethod++;
+  controlMethod %= Object.keys(controlMethods).length;
+})
+
 Myo.on('orientation', function(data){
 
   //Calculate all orientation variable to be used to control the sphero
@@ -143,30 +157,54 @@ Myo.on('accelerometer', function(data){
 
 //Set useSphero to false if you want to debug myo band without having a crazy ball running around all over
 if(useSphero){
-  orb.connect().then(function() {
-    console.log("SPHERO connected!");
-    spheroConnected = true;
-  }).then(function() {
-    orb.stopOnDisconnect(function(err, data) {
-      console.log(err || "data" + JSON.stringify(data));
-    });
+  orb.on('error', function(err, data){
+    console.log("an error was emitted");
+    // orb.connect().then(function(){
+    //   console.log('retried connection and was successful');
+    // })
+  })
+
+  orb.connect().then(onSpheroConnected, onSpheroConnectionFail).then(function() {
+    // orb.stopOnDisconnect(function(err, data) {
+    //   console.log(err || "data" + JSON.stringify(data));
+    // });
   }).then(function(){
-    setInterval(controlSphero, commandTimeout+10);
+    // setInterval(controlSphero, commandTimeout+10);
   }).then(function(){
     
   });
+}
+
+function onSpheroConnectionFail(){
+  console.log("Connection FAILED!!! Retrying!");
+  orb.connect().then(onSpheroConnected, onSpheroConnectionFail);
+}
+
+function onSpheroConnected(){
+  console.log("SPHERO connected!");
+  spheroConnected = true;
+
+  orb.setAutoReconnect(0, 50, function(err, data) {
+    console.log(err || "data: " + data);
+  });
+
+  orb.stopOnDisconnect(function(err, data) {
+    console.log(err || "data" + JSON.stringify(data));
+  });
+
+  setInterval(controlSphero, commandTimeout+10);
 }
 
 
 
 function controlSphero(){
   if(!myoIsOnArm)
-    return;
+    return; //Bail out. We don't want to control the sphero when the myo isn't on.
   switch (controlMethod){
-    case 'banking':
+    case controlMethods.banking:
       bankControl();
       break;
-    case 'aiming':
+    case controlMethods.aiming:
       aimControl();
       break;
   }
@@ -216,6 +254,14 @@ function handle(ch, key) {
     }
     process.stdin.pause();
     process.exit();
+  }
+
+  if(key.name === 'a'){
+    console.log('changing to aim control');
+    controlMethod = controlMethods.aiming;
+  }else if(key.name === 'b'){
+    console.log('changing to bank control');
+    controlMethod = controlMethods.banking;
   }
 
   //TODO: check if buffer gets discarded or if there are samples missing in the log file
