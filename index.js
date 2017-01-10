@@ -128,6 +128,11 @@ Myo.on('fingers_spread', function(){
   this.vibrate();
   controlMethod++;
   controlMethod %= Object.keys(controlMethods).length;
+  if(spheroConnected && controlMethod == 0){
+    orb.color("magenta");
+  }else{
+    orb.color("green");
+  }
 })
 
 Myo.on('orientation', function(data){
