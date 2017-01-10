@@ -9,6 +9,7 @@
   "author": "Gunnar Oledal",
   "license": "ISC",
   "dependencies": {
+    "bluetooth-serial-port": "^2.1.1",
     "keypress": "^0.2.1",
     "math3d": "^0.2.2",
     "myo": "^3.0.0",
