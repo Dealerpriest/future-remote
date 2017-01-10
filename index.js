@@ -10,7 +10,7 @@ var myAdaptor = require('./custom-adaptor.js');
 
 var commandTimeout = 50; //timeout before sent commands are considered dead.
 // var orb = sphero(process.env.PORT, {timeout: commandTimeout});
-var orb = sphero(null, {timeout: commandTimeout, adaptor: new myAdaptor(process.env.PORT), emitPacketErrors: true});
+var orb = sphero(null, {timeout: commandTimeout, adaptor: new myAdaptor(process.env.PORT)});
 
 //Inactivate all sphero interaction by setting to false
 var useSphero = true;
@@ -157,22 +157,7 @@ Myo.on('accelerometer', function(data){
 
 //Set useSphero to false if you want to debug myo band without having a crazy ball running around all over
 if(useSphero){
-  orb.on('error', function(err, data){
-    console.log("an error was emitted");
-    // orb.connect().then(function(){
-    //   console.log('retried connection and was successful');
-    // })
-  })
-
-  orb.connect().then(onSpheroConnected, onSpheroConnectionFail).then(function() {
-    // orb.stopOnDisconnect(function(err, data) {
-    //   console.log(err || "data" + JSON.stringify(data));
-    // });
-  }).then(function(){
-    // setInterval(controlSphero, commandTimeout+10);
-  }).then(function(){
-    
-  });
+  orb.connect().then(onSpheroConnected, onSpheroConnectionFail);
 }
 
 function onSpheroConnectionFail(){
