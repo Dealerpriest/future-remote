@@ -10,6 +10,9 @@ var serialAdaptor = require('./serialport-adaptor.js');
 //math3d uses x=right, y=up, z=forward
 
 var commandTimeout = 50; //timeout before sent commands are considered dead.
+var commandInterval; //this will get calculated from commandTimeout
+var commandFailCounter = 0;
+const failedCommandThreshold = 10;
 // var orb = sphero(process.env.PORT, {timeout: commandTimeout});
 if(!process.env.PORT){
   console.log("please provide a serial port as input by setting the PORT environment variable!");
@@ -28,6 +31,7 @@ const controlMethods = {
 }
 var controlMethod = controlMethods.aiming;
 var spheroConnected = false;
+var colors = ['green', 'magenta', 'purple', 'yellow'];
 
 //So we have quick acccess to the different APIs
 var Quaternion = math3d.Quaternion;
@@ -91,11 +95,9 @@ Myo.on('arm_synced', function(){
   console.log("arm is synced");
   console.log("on arm" + Myo.myos[0].arm);
   console.log("myo logo is towards: " + Myo.myos[0].direction);
-  // if(Myo.direction === 'towards_wrist'){
-  //   console.log("inverting armAxis");
-  //   // myoSpheroAngleOffset = 90;
-  //   armAxis = Vector3.left;
-  // }
+  if(spheroConnected){
+    orb.color(colors[controlMethod]);
+  }
 });
 
 Myo.on('arm_unsynced', function(){
@@ -103,9 +105,11 @@ Myo.on('arm_unsynced', function(){
   myoIsOnArm = false;
   if(spheroConnected){
     orb.stop();
+    orb.color('red');
   }
 })
 
+var calibrationTimeout;
 Myo.on('double_tap', function(){
   if(doubleTapCounter%2 === 0){
     console.log('First double tap');
@@ -115,23 +119,34 @@ Myo.on('double_tap', function(){
     }
     this.vibrate();
     console.log("myoSpheroAngleOffset: " + myoSpheroAngleOffset);
+    calibrationTimeout = setTimeout(function(){
+      doubleTapCounter++;
+      if(spheroConnected){
+        orb.finishCalibration();
+        orb.color(colors[controlMethod]);
+        this.vibrate();
+      }
+    }.bind(this), 10000);
   }else{
+    clearTimeout(calibrationTimeout);
     console.log('Second double tap');
     myoSpheroAngleOffset = 360 - projectedArmDirectionAngle;
-    orb.finishCalibration();
+    if(spheroConnected){
+      orb.finishCalibration();
+      orb.color(colors[controlMethod]);
+    }
     this.vibrate();
   }
   doubleTapCounter++;
 });
 
 Myo.on('fingers_spread', function(){
+  console.log("Changing control method");
   this.vibrate();
   controlMethod++;
   controlMethod %= Object.keys(controlMethods).length;
-  if(spheroConnected && controlMethod == 0){
-    orb.color("magenta");
-  }else{
-    orb.color("green");
+  if(spheroConnected){
+    orb.color(colors[controlMethod]);
   }
 })
 
@@ -178,7 +193,11 @@ function onSpheroConnectionFail(){
 
 function onSpheroConnected(){
   console.log("SPHERO connected!");
+  orb.on("error", function(err, data) {
+    console.log("sphero error");
+  });
   spheroConnected = true;
+  orb.color(colors[controlMethod]);
 
   orb.setAutoReconnect(0, 50, function(err, data) {
     console.log(err || "data: " + data);
@@ -188,14 +207,18 @@ function onSpheroConnected(){
     console.log(err || "data" + JSON.stringify(data));
   });
 
-  setInterval(controlSphero, commandTimeout+10);
+  commandInterval = commandTimeout+10;
+  setTimeout(controlSphero, commandInterval);
 }
 
 
 
 function controlSphero(){
-  if(!myoIsOnArm)
-    return; //Bail out. We don't want to control the sphero when the myo isn't on.
+  //always repeat this function. No matter what
+  setTimeout(controlSphero, commandInterval);
+  // console.log("controlSphero. CommandInterval is " + commandInterval);
+  if(!myoIsOnArm || !spheroConnected)
+    return; //Bail out. We don't want to control the sphero when the myo isn't on. Or if there is no sphero
   switch (controlMethod){
     case controlMethods.banking:
       bankControl();
@@ -206,28 +229,55 @@ function controlSphero(){
   }
 }
 
+function commandFailed(){
+  // console.log("command failed. CommandInterval is " + commandInterval);
+  commandInterval++;
+  //constrain
+  if(commandInterval >= 100){
+    commandInterval = 100
+  }
+  // commandFailCounter++;
+  // if(commandFailCounter > failedCommandThreshold){
+  //   commandCongestion();
+  //   commandFailCounter = 0;
+  // }
+}
+
+function commandSuccess(){
+  // console.log("command success. CommandInterval is " + commandInterval);
+  commandInterval--;
+  if(commandInterval < commandTimeout + 10){
+    commandInterval = commandTimeout + 10;
+  }
+  // commandFailCounter++;
+  // if(commandFailCounter > failedCommandThreshold){
+  //   commandCongestion();
+  //   commandFailCounter = 0;
+  // }
+}
+
 function aimControl(){
-  console.log("armDirectionVector is: " + armDirectionVector.values.map(function(x){return x.toFixed(2)}));
+  // console.log("armDirectionVector is: " + armDirectionVector.values.map(function(x){return x.toFixed(2)}));
   // console.log("with a magnitude of: " +armDirectionVector.magnitude);
 
   var speed = projectedArmDirectionVector.magnitude * 100;
 
-  console.log("sending roll request with direction: " + adjustedArmdDirectionAngle + " and speed " + speed);
-  orb.roll(speed, adjustedArmdDirectionAngle);
+  // console.log("sending roll request with direction: " + adjustedArmdDirectionAngle + " and speed " + speed);
+  orb.roll(speed, adjustedArmdDirectionAngle).then(commandSuccess, commandFailed);
 }
 
 function bankControl(){
-  console.log("accelerometerPlaneVector" + accelerometerPlaneVector.values.map(function(x){return x.toFixed(2)}));
+  // console.log("accelerometerPlaneVector" + accelerometerPlaneVector.values.map(function(x){return x.toFixed(2)}));
   // console.log("with a magnitude of: " +armDirectionVector.magnitude);
   
-  console.log("bankDirectionAngle: " + bankDirectionAngle);
+  // console.log("bankDirectionAngle: " + bankDirectionAngle);
   var rollDirection = bankDirectionAngle + adjustedArmdDirectionAngle;
   rollDirection = constrainAngle(rollDirection);
 
   var speed = accelerometerPlaneVector.magnitude * 100;
 
-  console.log("sending roll request with rollDirection: " + rollDirection + " and speed " + speed);
-  orb.roll(speed, rollDirection);
+  // console.log("sending roll request with rollDirection: " + rollDirection + " and speed " + speed);
+  orb.roll(speed, rollDirection).then(commandSuccess, commandFailed);
 
 }
 
