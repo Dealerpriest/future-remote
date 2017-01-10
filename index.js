@@ -10,7 +10,7 @@ var myAdaptor = require('./custom-adaptor.js');
 
 var commandTimeout = 50; //timeout before sent commands are considered dead.
 // var orb = sphero(process.env.PORT, {timeout: commandTimeout});
-var orb = sphero(null, {timeout: commandTimeout, adaptor: new myAdaptor(process.env.PORT)});
+var orb = sphero(null, {timeout: commandTimeout, adaptor: new myAdaptor(process.env.ADDRESS)});
 
 //Inactivate all sphero interaction by setting to false
 var useSphero = true;
