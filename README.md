@@ -4,8 +4,9 @@ Prototype code for controlling Sphero 2.0 with Myo armband.
 # Install
 These steps should be undertaken i a terminal (obviously).
 Make sure to have [node](https://nodejs.org/) installed (and [git](https://git-scm.com/), also obviously).
-For some of the node packages in this project you'll also need to have some compile tools installed (since these are native modules wrapped into node modules)
-Cd to an appropriate folder
+For some of the node packages in this project you'll also need to have some compile tools installed (since these are native modules wrapped into node modules). These tools will probably ask to be installed when running the `npm install` command below.
+
+*Cd to an appropriate folder where you want to installl the program.*
 ```
 git clone https://github.com/Dealerpriest/future-remote.git
 cd future-remote
